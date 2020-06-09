@@ -327,4 +327,63 @@ void UKF::UpdateRadar(MeasurementPackage meas_package) {
    * covariance, P_.
    * You can also calculate the radar NIS, if desired.
    */
+
+  int n_z = 3;
+  
+  MatrixXd Zsig = MatrixXd(n_z, 2 * n_aug_ + 1); Zsig.fill(0.0);
+  VectorXd z_pred = VectorXd(n_z); z_pred.fill(0.0);
+  MatrixXd S = MatrixXd(n_z,n_z); S.fill(0.0);
+  
+  // Transform sigma points into the measurement space
+  for (int i = 0; i < 2 * n_aug_ + 1; i++) {
+    double px = Xsig_pred_.col(i)(0);
+    double py = Xsig_pred_.col(i)(1);
+    double v = Xsig_pred_.col(i)(2);
+    double yaw = Xsig_pred_.col(i)(3);
+    double yaw_d = Xsig_pred_.col(i)(4);
+
+    Zsig.col(i) << sqrt(px*px+py*py),
+                   atan2(py,px),
+                   (px*cos(yaw)*v+py*sin(yaw)*v) / sqrt(px*px+py*py);
+    
+    z_pred += weights_(i) * Zsig.col(i);
+  }
+
+  for (int i = 0; i < 2 * n_aug_ + 1; i++) {
+    VectorXd z_diff = Zsig.col(i) - z_pred;
+    
+    while (z_diff(1) > M_PI) z_diff(1) -= 2. * M_PI;
+    while (z_diff(1) < - M_PI) z_diff(1) += 2. * M_PI;
+    
+    S += weights_(i) * z_diff * z_diff.transpose();
+  }
+  S += R_r_;
+
+  VectorXd z = VectorXd(n_z);
+  z << meas_package.raw_measurements_(0),
+       meas_package.raw_measurements_(1),
+       meas_package.raw_measurements_(2);
+  
+  MatrixXd Tc = MatrixXd(n_x_, n_z); Tc.fill(0.0);
+  
+  for (int i = 0; i < 2 * n_aug_ + 1; i++) {
+    VectorXd x_diff = Xsig_pred_.col(i) - x_;
+    while (x_diff(3) > M_PI) x_diff(3) -= 2. * M_PI;
+    while (x_diff(3) < -M_PI) x_diff(3) += 2. * M_PI;
+    
+    VectorXd z_diff = Zsig.col(i) - z_pred;
+    while (z_diff(1) > M_PI) z_diff(1) -= 2. * M_PI;
+    while (z_diff(1) < -M_PI) z_diff(1) += 2. * M_PI;
+  
+    Tc += weights_(i) * x_diff * z_diff.transpose();
+  }
+  
+  VectorXd z_diff = z - z_pred;
+  while (z_diff(1) > M_PI) z_diff(1) -= 2. * M_PI;
+  while (z_diff(1) < -M_PI) z_diff(1) += 2. * M_PI;
+  
+  MatrixXd K = Tc * S.inverse();
+  x_ += K*z_diff;
+  P_ -= K*S*K.transpose();
+
 }
