@@ -57,6 +57,16 @@ UKF::UKF() {
    * Hint: one or more values initialized above might be wildly off...
    */
 
+  R_l_ = MatrixXd(2, 2);
+  R_l_ << std_laspx_*std_laspx_, 0,
+          0, std_laspy_*std_laspy_;;
+
+  R_r_ = MatrixXd(3, 3);
+  R_r_ << std_radr_ * std_radr_, 0, 0,
+              0, std_radphi_ * std_radphi_, 0,
+              0, 0, std_radrd_ * std_radrd_;
+
+
   // Will be set to true after the first measurement.
   is_initialized_ = false;
 
@@ -261,6 +271,53 @@ void UKF::UpdateLidar(MeasurementPackage meas_package) {
    * covariance, P_.
    * You can also calculate the lidar NIS, if desired.
    */
+
+  
+  int n_z = 2; // Laser Measures two values px, py
+  MatrixXd Zsig = MatrixXd(n_z, 2 * n_aug_ + 1); Zsig.fill(0.0); // Sigma Points in Measurement Space
+  
+  VectorXd z_pred = VectorXd(n_z); z_pred.fill(0.0); // Updated State After Measurement
+  MatrixXd S = MatrixXd(n_z,n_z); S.fill(0.0); // Updated Cov. Matrix
+
+  // Transform sigma points into the measurement space
+  for (int i = 0; i < 2 * n_aug_ + 1; i++) {
+    Zsig.col(i) << Xsig_pred_.col(i)(0),
+                   Xsig_pred_.col(i)(1);
+    z_pred += weights_(i) * Zsig.col(i);
+  }
+
+  // Computing Measurement Cov. Matrix
+  for (int i = 0; i < 2 * n_aug_ + 1; i++) {
+    VectorXd z_diff = Zsig.col(i) - z_pred;
+    S += weights_(i) * z_diff * z_diff.transpose();
+  }
+  
+  S += R_l_;
+  
+  VectorXd z = VectorXd(n_z);
+  z << meas_package.raw_measurements_(0),
+       meas_package.raw_measurements_(1);
+  
+  MatrixXd Tc = MatrixXd(n_x_, n_z); Tc.fill(0.0);
+  
+  for (int i = 0; i < 2 * n_aug_ + 1; i++) {
+    VectorXd x_diff = Xsig_pred_.col(i) - x_;
+    
+    while (x_diff(3) > M_PI) x_diff(3) -= 2. * M_PI;
+    while (x_diff(3) < -M_PI) x_diff(3) += 2. * M_PI;
+    
+    VectorXd z_diff = Zsig.col(i) - z_pred;
+    Tc += weights_(i) * x_diff * z_diff.transpose();
+
+  }
+  
+  VectorXd z_diff = z - z_pred;
+  
+  MatrixXd K = Tc * S.inverse();
+  x_ += K*z_diff;
+  P_ -= K*S*K.transpose();
+  
+  
 }
 
 void UKF::UpdateRadar(MeasurementPackage meas_package) {

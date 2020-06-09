@@ -89,6 +89,9 @@ class UKF {
   // Weights of sigma points
   Eigen::VectorXd weights_;
 
+  Eigen::MatrixXd R_l_;
+  Eigen::MatrixXd R_r_;
+
   // State dimension
   int n_x_;
 
