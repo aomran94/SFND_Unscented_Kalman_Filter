@@ -22,6 +22,8 @@ class UKF {
    */
   void ProcessMeasurement(MeasurementPackage meas_package);
 
+  void UKF::InitializeMeasurement(MeasurementPackage meas_package);
+
   /**
    * Prediction Predicts sigma points, the state, and the state covariance
    * matrix
