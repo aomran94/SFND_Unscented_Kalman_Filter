@@ -146,6 +146,112 @@ void UKF::Prediction(double delta_t) {
    * Modify the state vector, x_. Predict sigma points, the state, 
    * and the state covariance matrix.
    */
+
+  // Computation of original sigma points, each sigma point is a column in Xsig.
+  lambda_ = 3 - n_x_;
+  MatrixXd Xsig_ = MatrixXd(n_x_, 2 * n_x_ + 1);
+  MatrixXd A_ = P_.llt().matrixL();
+  
+  Xsig_.col(0) = x_;
+  for(int i = 0; i < n_x_; i++) {
+    Xsig_.col(i+1) = x_ + std::sqrt(lambda_+n_x_)*A_.col(i);
+    Xsig_.col(i+1+n_x_) = x_ - std::sqrt(lambda_+n_x_)*A_.col(i);
+  }
+
+  // Augmentation Process
+  lambda_ = 3 - n_aug_;
+  VectorXd x_aug_ = VectorXd(7);    // Augmented State
+  MatrixXd P_aug_ = MatrixXd(7, 7); // Augmented State Covariance
+  
+  MatrixXd Xsig_aug_ = MatrixXd(n_aug_, 2 * n_aug_ + 1); // Sigma points for the new augmented space
+  
+  // Augmented State Mean 
+  x_aug_.head(5) = x_;
+  x_aug_(5) = 0;
+  x_aug_(6) = 0;
+  
+  // Augmented Satte Covariance Matrix
+  MatrixXd Q = MatrixXd(2,2);
+  Q << std_a_*std_a_, 0,
+        0, std_yawdd_*std_yawdd_;
+  P_aug_.fill(0.0);
+  P_aug_.topLeftCorner(5, 5) = P_;
+  P_aug_.bottomRightCorner(2, 2) = Q;
+
+  // Square root of Augmented State Cov Matrix
+  MatrixXd A_aug = P_aug_.llt().matrixL();
+  
+  // Augmented Sigma Points
+  Xsig_aug_.col(0) = x_aug_;
+  for(int i = 0; i < n_aug_; i++) {
+    Xsig_aug_.col(i+1) = x_aug_ + std::sqrt(lambda_+n_aug_)*A_aug.col(i);
+    Xsig_aug_.col(i+1+n_aug_) = x_aug_ - std::sqrt(lambda_+n_aug_)*A_aug.col(i);
+  }
+  
+  // Perform Prediction on Augmented Sigma Points, v1, v2 vectors for each added part (one changes for yaw = 0 other not). 
+  VectorXd v1 = VectorXd(5);
+  VectorXd v2 = VectorXd(5);
+  for(int i = 0; i < 2 * n_aug_ + 1; i++) {
+    
+    VectorXd calc_col = Xsig_aug_.col(i);
+    double px = calc_col(0);
+    double py = calc_col(1);
+    double v = calc_col(2);
+    double yaw = calc_col(3);
+    double yawd = calc_col(4);
+    double v_aug = calc_col(5);
+    double v_yawdd = calc_col(6);
+    
+    VectorXd orig = calc_col.head(5);
+    
+    if(yawd > .001) {
+      v1 << (v/yawd)*(sin(yaw+yawd*delta_t) - sin(yaw)),
+            (v/yawd)*(-cos(yaw+yawd*delta_t) + cos(yaw)),
+            0,
+            yawd * delta_t,
+            0;
+    } else {
+      v1 << v*cos(yaw)*delta_t,
+            v*sin(yaw)*delta_t,
+            0,
+            yawd*delta_t,
+            0;
+    }
+    
+    v2 << .5*delta_t*delta_t*cos(yaw)*v_aug,
+            .5*delta_t*delta_t*sin(yaw)*v_aug,
+            delta_t*v_aug,
+            .5*delta_t*delta_t*v_yawdd,
+            delta_t*v_yawdd;
+    
+    Xsig_pred_.col(i) << orig + v1 + v2;
+  }
+
+  // Compute the predicted state vector and covariance matrix by merging predicted sigma points with their corresponding weights
+
+  VectorXd x_pred = VectorXd(n_x_); x_pred.fill(0.0);     // Predicted state vector
+  MatrixXd P_pred = MatrixXd(n_x_, n_x_); P_pred.fill(0.0); // Predicted state covariance matrix
+
+  for(int i = 0; i < 2 * n_aug_ + 1; i++) {
+    weights_(i) = (i==0)?lambda_:.5 / (lambda_ + n_aug_);
+    x_pred += weights_(i) * Xsig_pred_.col(i);
+  }
+  
+  for (int i = 0; i < 2 * n_aug_ + 1; i++) {
+    
+    VectorXd x_diff = Xsig_pred_.col(i) - x_pred;
+    while (x_diff(3) > M_PI) x_diff(3) -= 2. * M_PI;
+    while (x_diff(3) < -M_PI) x_diff(3) += 2. * M_PI;
+    
+    P_pred += weights_(i) * x_diff * x_diff.transpose();
+
+  }
+  
+  // Update Variables with final prediction result
+  x_ = x_pred;
+  P_ = P_pred;
+
+
 }
 
 void UKF::UpdateLidar(MeasurementPackage meas_package) {
