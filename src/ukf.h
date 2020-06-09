@@ -22,8 +22,8 @@ class UKF {
    */
   void ProcessMeasurement(MeasurementPackage meas_package);
 
-  void UKF::InitializeMeasurement(MeasurementPackage meas_package);
 
+  void InitializeMeasurement(MeasurementPackage meas_package);
   /**
    * Prediction Predicts sigma points, the state, and the state covariance
    * matrix
@@ -89,9 +89,6 @@ class UKF {
   // Weights of sigma points
   Eigen::VectorXd weights_;
 
-  Eigen::MatrixXd R_l_;
-  Eigen::MatrixXd R_r_;
-
   // State dimension
   int n_x_;
 
@@ -100,6 +97,8 @@ class UKF {
 
   // Sigma point spreading parameter
   double lambda_;
+  
+
 };
 
 #endif  // UKF_H
